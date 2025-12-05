@@ -1,15 +1,19 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, Platform } from "react-native"
+import { useEffect, useState, useRef } from "react"
+import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, Platform, Image } from "react-native"
 import { useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
-import { ArrowLeft, Send, Calendar, Users, MessageSquare, Video, X } from "lucide-react-native"
+import { ArrowLeft, Send, Calendar, Users, MessageSquare, Video, X, Music, Search, Check } from "lucide-react-native"
 import { supabase } from "@/lib/supabase/mobile"
 import type { Profile } from "@/lib/types"
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground"
 import DateTimePicker from "@react-native-community/datetimepicker"
 import * as ImagePicker from "expo-image-picker"
+import * as FileSystem from "expo-file-system/legacy"
+import { decode } from "base64-arraybuffer"
+import { Audio } from "expo-av"
+import { searchMusic, type MusicTrack } from "@/lib/services/musicSearch"
 
 export default function CreateCapsulePage() {
   const router = useRouter()
@@ -27,6 +31,14 @@ export default function CreateCapsulePage() {
   const [showDatePicker, setShowDatePicker] = useState(Platform.OS === 'ios') // Always show on iOS
 
   const [videoUri, setVideoUri] = useState<string | null>(null)
+
+  // Music states
+  const [musicQuery, setMusicQuery] = useState("")
+  const [musicResults, setMusicResults] = useState<MusicTrack[]>([])
+  const [selectedMusic, setSelectedMusic] = useState<MusicTrack | null>(null)
+  const [searchingMusic, setSearchingMusic] = useState(false)
+  const [previewSound, setPreviewSound] = useState<Audio.Sound | null>(null)
+  const [playingPreviewId, setPlayingPreviewId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -59,12 +71,56 @@ export default function CreateCapsulePage() {
     }
   }
 
-  const pickVideo = async () => {
+  const showVideoOptions = () => {
+    Alert.alert(
+      "Ajouter une vidéo",
+      "Comment voulez-vous ajouter votre vidéo ?",
+      [
+        {
+          text: "📹 Enregistrer",
+          onPress: () => recordVideo()
+        },
+        {
+          text: "📂 Galerie",
+          onPress: () => pickFromGallery()
+        },
+        {
+          text: "Annuler",
+          style: "cancel"
+        }
+      ]
+    )
+  }
+
+  const recordVideo = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert("Permission refusée", "Autorisez l'accès à la caméra dans les réglages.")
+        return
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: true,
+        quality: 0.7,
+        videoMaxDuration: 60, // Max 60 secondes
+      })
+
+      if (!result.canceled && result.assets[0].uri) {
+        setVideoUri(result.assets[0].uri)
+      }
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible d'enregistrer la vidéo")
+    }
+  }
+
+  const pickFromGallery = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: ['videos'],
         allowsEditing: true,
-        quality: 1,
+        quality: 0.7,
       })
 
       if (!result.canceled && result.assets[0].uri) {
@@ -74,6 +130,80 @@ export default function CreateCapsulePage() {
       Alert.alert("Erreur", "Impossible de sélectionner la vidéo")
     }
   }
+
+  // Music search and preview functions
+  const handleMusicSearch = async () => {
+    if (musicQuery.trim().length < 2) return
+    setSearchingMusic(true)
+    try {
+      const results = await searchMusic(musicQuery)
+      setMusicResults(results)
+    } finally {
+      setSearchingMusic(false)
+    }
+  }
+
+  const playPreview = async (track: MusicTrack) => {
+    // Stop current preview if playing
+    if (previewSound) {
+      await previewSound.unloadAsync()
+      setPreviewSound(null)
+    }
+
+    // If clicking same track, just stop
+    if (playingPreviewId === track.id) {
+      setPlayingPreviewId(null)
+      return
+    }
+
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: track.previewUrl },
+        { shouldPlay: true, volume: 0.5 }
+      )
+      setPreviewSound(sound)
+      setPlayingPreviewId(track.id)
+
+      // Auto-stop when finished
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingPreviewId(null)
+        }
+      })
+    } catch (error) {
+      console.error("Preview error:", error)
+    }
+  }
+
+  const selectMusic = (track: MusicTrack) => {
+    setSelectedMusic(track)
+    setMusicResults([])
+    setMusicQuery("")
+    // Stop preview
+    if (previewSound) {
+      previewSound.unloadAsync()
+      setPreviewSound(null)
+      setPlayingPreviewId(null)
+    }
+  }
+
+  const clearMusic = async () => {
+    setSelectedMusic(null)
+    if (previewSound) {
+      await previewSound.unloadAsync()
+      setPreviewSound(null)
+      setPlayingPreviewId(null)
+    }
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (previewSound) {
+        previewSound.unloadAsync()
+      }
+    }
+  }, [previewSound])
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     // On Android, close picker after selection. On iOS, keep it open (inline mode)
@@ -86,11 +216,10 @@ export default function CreateCapsulePage() {
   }
 
   const handleSend = async () => {
-    if (!title || !selectedFriend) {
-      Alert.alert("Erreur", "Veuillez remplir le titre et choisir un ami")
+    if (!selectedFriend) {
+      Alert.alert("Ami manquant", "Sélectionnez un ami.")
       return
     }
-
     if (!videoUri) {
       Alert.alert("Vidéo manquante", "Le concept est de laisser une vidéo ! Ajoutez-en une.")
       return
@@ -101,26 +230,40 @@ export default function CreateCapsulePage() {
       let videoPath = null
 
       if (videoUri) {
-        const fileName = `${userId}/${Date.now()}.mp4`
-        const response = await fetch(videoUri)
-        const blob = await response.blob()
+        // Détecter l'extension du fichier
+        const fileExtension = videoUri.split('.').pop()?.toLowerCase() || 'mp4'
+        const mimeType = fileExtension === 'mov' ? 'video/quicktime' : 'video/mp4'
+        const fileName = `${userId}/${Date.now()}.${fileExtension}`
 
-        const { error: uploadError } = await supabase.storage
-          .from("capsules")
-          .upload(fileName, blob, {
-            contentType: "video/mp4",
-            upsert: true
-          })
+        // Obtenir le token d'authentification
+        const { data: { session } } = await supabase.auth.getSession()
 
-        if (uploadError) {
-          if (uploadError.message.includes("Bucket not found")) {
-            throw new Error("Erreur Configuration: Le dossier 'capsules' n'existe pas sur le serveur. Veuillez le créer dans le Dashboard Supabase (Storage > New Bucket 'capsules' Public).")
+        // Upload direct avec FileSystem.uploadAsync (méthode native recommandée)
+        const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/capsules/${fileName}`
+
+        const uploadResult = await FileSystem.uploadAsync(uploadUrl, videoUri, {
+          httpMethod: 'POST',
+          uploadType: 0, // BINARY_CONTENT = 0
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': mimeType,
+            'x-upsert': 'true',
+          },
+        })
+
+        console.log("Upload result:", uploadResult.status, uploadResult.body)
+
+        if (uploadResult.status !== 200) {
+          const errorBody = JSON.parse(uploadResult.body || '{}')
+          if (errorBody.message?.includes("Bucket not found")) {
+            throw new Error("Erreur Configuration: Le dossier 'capsules' n'existe pas sur le serveur.")
           }
-          throw uploadError
+          throw new Error(errorBody.message || "Erreur d'upload")
         }
 
         const { data: { publicUrl } } = supabase.storage.from("capsules").getPublicUrl(fileName)
         videoPath = publicUrl
+        console.log("✅ Video uploaded:", videoPath)
       }
 
       const { error } = await supabase.from("capsules").insert({
@@ -129,6 +272,10 @@ export default function CreateCapsulePage() {
         title,
         note,
         video_path: videoPath,
+        music_title: selectedMusic?.title || null,
+        music_artist: selectedMusic?.artist || null,
+        music_preview_url: selectedMusic?.previewUrl || null,
+        music_cover_url: selectedMusic?.cover || null,
         unlock_date: unlockDate.toISOString(),
         is_viewed: false,
       })
@@ -210,11 +357,78 @@ export default function CreateCapsulePage() {
                 </Pressable>
               </View>
             ) : (
-              <Pressable style={styles.uploadButton} onPress={pickVideo}>
+              <Pressable style={styles.uploadButton} onPress={showVideoOptions}>
                 <Video size={24} color="#FF6B35" />
                 <Text style={styles.uploadText}>Enregistrer ou choisir une vidéo</Text>
               </Pressable>
             )}
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>🎵 Musique d'ambiance (Optionnel)</Text>
+
+            {selectedMusic ? (
+              <View style={styles.selectedMusicCard}>
+                <Image source={{ uri: selectedMusic.cover }} style={styles.musicCover} />
+                <View style={styles.selectedMusicInfo}>
+                  <Text style={styles.selectedMusicTitle} numberOfLines={1}>{selectedMusic.title}</Text>
+                  <Text style={styles.selectedMusicArtist} numberOfLines={1}>{selectedMusic.artist}</Text>
+                </View>
+                <Pressable onPress={clearMusic} style={styles.removeMusicButton}>
+                  <X size={16} color="#FFF" />
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <View style={styles.musicSearchContainer}>
+                  <Search size={18} color="rgba(255,255,255,0.4)" />
+                  <TextInput
+                    style={styles.musicSearchInput}
+                    placeholder="Rechercher une chanson..."
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    value={musicQuery}
+                    onChangeText={setMusicQuery}
+                    onSubmitEditing={handleMusicSearch}
+                    returnKeyType="search"
+                  />
+                  {searchingMusic ? (
+                    <ActivityIndicator size="small" color="#FF6B35" />
+                  ) : (
+                    <Pressable onPress={handleMusicSearch}>
+                      <Music size={20} color="#FF6B35" />
+                    </Pressable>
+                  )}
+                </View>
+
+                {musicResults.length > 0 && (
+                  <View style={styles.musicResultsContainer}>
+                    {musicResults.map((track) => (
+                      <Pressable
+                        key={track.id}
+                        style={styles.musicResultItem}
+                        onPress={() => playPreview(track)}
+                      >
+                        <Image source={{ uri: track.cover }} style={styles.musicResultCover} />
+                        <View style={styles.musicResultInfo}>
+                          <Text style={styles.musicResultTitle} numberOfLines={1}>{track.title}</Text>
+                          <Text style={styles.musicResultArtist} numberOfLines={1}>{track.artist}</Text>
+                        </View>
+                        {playingPreviewId === track.id ? (
+                          <View style={styles.playingIndicator}>
+                            <Text style={styles.playingText}>♫</Text>
+                          </View>
+                        ) : (
+                          <Pressable onPress={() => selectMusic(track)} style={styles.selectMusicButton}>
+                            <Check size={16} color="#FFF" />
+                          </Pressable>
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+            <Text style={styles.musicHint}>Tap pour prévisualiser, ✓ pour sélectionner</Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -305,4 +519,27 @@ const styles = StyleSheet.create({
   videoPreview: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 14, padding: 16, gap: 12 },
   videoText: { color: "#FEFEFE", flex: 1 },
   removeVideo: { padding: 4, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12 },
+
+  // Music search styles
+  musicSearchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" },
+  musicSearchInput: { flex: 1, color: "#FEFEFE", fontSize: 15 },
+  musicResultsContainer: { marginTop: 12, gap: 8 },
+  musicResultItem: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 12, padding: 10, gap: 12 },
+  musicResultCover: { width: 48, height: 48, borderRadius: 8 },
+  musicResultInfo: { flex: 1 },
+  musicResultTitle: { color: "#FEFEFE", fontSize: 14, fontWeight: "600" },
+  musicResultArtist: { color: "rgba(255,255,255,0.5)", fontSize: 12, marginTop: 2 },
+  playingIndicator: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#FF6B35", alignItems: "center", justifyContent: "center" },
+  playingText: { color: "#FFF", fontSize: 16 },
+  selectMusicButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,107,53,0.3)", alignItems: "center", justifyContent: "center" },
+
+  // Selected music card
+  selectedMusicCard: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,107,53,0.15)", borderRadius: 14, padding: 12, gap: 12, borderWidth: 1, borderColor: "rgba(255,107,53,0.3)" },
+  musicCover: { width: 56, height: 56, borderRadius: 10 },
+  selectedMusicInfo: { flex: 1 },
+  selectedMusicTitle: { color: "#FEFEFE", fontSize: 15, fontWeight: "600" },
+  selectedMusicArtist: { color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 2 },
+  removeMusicButton: { padding: 6, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12 },
+
+  musicHint: { color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 8 },
 })

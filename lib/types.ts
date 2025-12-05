@@ -14,6 +14,9 @@ export interface Capsule {
   title: string | null
   video_path: string
   music_title: string | null
+  music_artist: string | null
+  music_preview_url: string | null
+  music_cover_url: string | null
   note: string | null
   location_data: {
     lat: number

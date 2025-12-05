@@ -65,6 +65,38 @@ export default function FriendsPage() {
     }
   }
 
+  async function acceptFriendRequest(friendshipId: string) {
+    try {
+      const { error } = await supabase
+        .from("friendships")
+        .update({ status: "accepted" })
+        .eq("id", friendshipId)
+
+      if (error) throw error
+
+      // Refresh data
+      fetchData()
+    } catch (error) {
+      console.error("Error accepting friend request:", error)
+    }
+  }
+
+  async function rejectFriendRequest(friendshipId: string) {
+    try {
+      const { error } = await supabase
+        .from("friendships")
+        .delete()
+        .eq("id", friendshipId)
+
+      if (error) throw error
+
+      // Refresh data
+      fetchData()
+    } catch (error) {
+      console.error("Error rejecting friend request:", error)
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -107,10 +139,10 @@ export default function FriendsPage() {
                   <Text style={styles.friendName}>{f.requester?.username}</Text>
                 </View>
                 <View style={styles.actions}>
-                  <Pressable style={[styles.actionButton, styles.acceptButton]}>
+                  <Pressable style={[styles.actionButton, styles.acceptButton]} onPress={() => acceptFriendRequest(f.id)}>
                     <Check size={16} color="#FEFEFE" />
                   </Pressable>
-                  <Pressable style={[styles.actionButton, styles.rejectButton]}>
+                  <Pressable style={[styles.actionButton, styles.rejectButton]} onPress={() => rejectFriendRequest(f.id)}>
                     <X size={16} color="#FEFEFE" />
                   </Pressable>
                 </View>

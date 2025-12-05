@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Dimensions, Animated } from "react-native"
-import { Link, useRouter } from "expo-router"
+import { Link, useRouter, useFocusEffect } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { Clock, Send, Users, User, ChevronRight, Plus, Inbox, Gift } from "lucide-react-native"
 import { supabase } from "@/lib/supabase/mobile"
@@ -21,7 +21,12 @@ export default function DashboardPage() {
 
   const scaleAnim = useRef(new Animated.Value(1)).current
 
-  useEffect(() => { fetchData() }, [])
+  // Rafraîchit les données à chaque fois que la page est visible
+  useFocusEffect(
+    useCallback(() => {
+      fetchData()
+    }, [])
+  )
 
   async function fetchData() {
     try {
