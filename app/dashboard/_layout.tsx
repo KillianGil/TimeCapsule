@@ -19,25 +19,31 @@ export default function DashboardLayout() {
   useEffect(() => {
     checkAuth()
 
-    // Register for push notifications
-    registerForPushNotifications()
+    // Register for push notifications (wrapped in try-catch for iOS without native module)
+    try {
+      registerForPushNotifications()
 
-    // Listen for notifications received while app is open
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification)
-    })
+      // Listen for notifications received while app is open
+      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+        console.log('Notification received:', notification)
+      })
 
-    // Listen for user tapping on notification
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data
-      if (data?.capsuleId) {
-        router.push(`/dashboard/capsule/${data.capsuleId}`)
-      }
-    })
+      // Listen for user tapping on notification
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        const data = response.notification.request.content.data
+        if (data?.capsuleId) {
+          router.push(`/dashboard/capsule/${data.capsuleId}`)
+        }
+      })
+    } catch (error) {
+      console.log('Push notifications not available:', error)
+    }
 
     return () => {
-      if (notificationListener.current) notificationListener.current.remove()
-      if (responseListener.current) responseListener.current.remove()
+      try {
+        if (notificationListener.current) notificationListener.current.remove()
+        if (responseListener.current) responseListener.current.remove()
+      } catch (e) { }
     }
   }, [])
 

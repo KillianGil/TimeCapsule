@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useRef } from "react"
-import { View, Text, StyleSheet, Pressable, Dimensions, Animated, Easing } from "react-native"
+import { View, Text, StyleSheet, Pressable, Dimensions, Animated, Easing, Image } from "react-native"
 import { useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { ArrowRight, Sparkles } from "lucide-react-native"
@@ -208,11 +208,11 @@ export default function HomePage() {
         {/* Logo with animation */}
         <Animated.View style={[styles.header, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
           <View style={styles.logoContainer}>
-            <View style={styles.logoWrapper}>
-              <LinearGradient colors={["#FF6B35", "#D4A574"]} style={styles.logoIcon} />
-              <Animated.View style={[styles.logoGlow, { opacity: glowOpacity }]} />
-            </View>
-            <Text style={styles.logoText}>TimeCapsule</Text>
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
         </Animated.View>
 
@@ -277,44 +277,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 28,
-    paddingTop: 60,
-    paddingBottom: 50,
-    justifyContent: "space-between",
+    paddingTop: 40,
+    paddingBottom: 40,
+    justifyContent: "flex-start",
   },
   header: {
     alignItems: "center",
   },
   logoContainer: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
+    marginBottom: 20,
   },
-  logoWrapper: {
-    position: "relative",
-  },
-  logoIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-  },
-  logoGlow: {
-    position: "absolute",
-    top: -8,
-    left: -8,
-    right: -8,
-    bottom: -8,
-    borderRadius: 20,
-    backgroundColor: "#FF6B35",
-    opacity: 0.3,
-  },
-  logoText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#FEFEFE",
-    letterSpacing: 0.5,
+  logoImage: {
+    width: width * 0.95,
+    height: 220,
   },
   hero: {
     alignItems: "center",
+    marginBottom: 30,
   },
   taglineContainer: {
     flexDirection: "row",

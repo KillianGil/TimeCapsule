@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { View, Text, StyleSheet, ActivityIndicator, Pressable, Animated, Dimensions, ScrollView, Image } from "react-native"
+import { View, Text, StyleSheet, ActivityIndicator, Pressable, Animated, Dimensions, ScrollView, Image, Modal } from "react-native"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { ArrowLeft, Lock, Clock, Gift, Play, User, Calendar, MessageSquare, Video as VideoIcon, Music, Pause } from "lucide-react-native"
@@ -10,8 +10,9 @@ import type { Capsule } from "@/lib/types"
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground"
 import { useVideoPlayer, VideoView } from "expo-video"
 import { Audio } from "expo-av"
+import LottieView from "lottie-react-native"
 
-const { width } = Dimensions.get("window")
+const { width, height: screenHeight } = Dimensions.get("window")
 
 // Composant VideoPlayer séparé pour utiliser le hook correctement
 function VideoPlayer({ videoUrl }: { videoUrl: string }) {
@@ -41,6 +42,7 @@ export default function CapsulePage() {
   const [isUnlocked, setIsUnlocked] = useState(false)
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
   const [showContent, setShowContent] = useState(false)
+  const [showOpeningAnimation, setShowOpeningAnimation] = useState(false)
 
   // Music playback state
   const [musicSound, setMusicSound] = useState<Audio.Sound | null>(null)
@@ -148,6 +150,13 @@ export default function CapsulePage() {
   }
 
   const handleOpenCapsule = () => {
+    console.log('Opening capsule...')
+    // Show opening animation first - animation will call onOpeningAnimationFinish when done
+    setShowOpeningAnimation(true)
+  }
+
+  const onOpeningAnimationFinish = () => {
+    setShowOpeningAnimation(false)
     setShowContent(true)
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
@@ -215,7 +224,7 @@ export default function CapsulePage() {
       <AnimatedBackground>
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>{error}</Text>
-          <Pressable style={styles.backButtonCenter} onPress={() => router.back()}>
+          <Pressable style={styles.backButtonCenter} onPress={() => router.replace('/dashboard')}>
             <Text style={styles.backButtonText}>Retour</Text>
           </Pressable>
         </View>
@@ -230,7 +239,7 @@ export default function CapsulePage() {
     return (
       <AnimatedBackground>
         <View style={styles.container}>
-          <Pressable style={styles.headerBack} onPress={() => router.back()}>
+          <Pressable style={styles.headerBack} onPress={() => router.replace('/dashboard')}>
             <ArrowLeft size={24} color="#FEFEFE" />
           </Pressable>
 
@@ -281,8 +290,28 @@ export default function CapsulePage() {
   if (!showContent) {
     return (
       <AnimatedBackground>
+        {/* Opening Animation Modal */}
+        <Modal
+          visible={showOpeningAnimation}
+          transparent
+          animationType="fade"
+        >
+          <View style={styles.animationOverlay}>
+            <View style={styles.animationContainer}>
+              <LottieView
+                source={require('../../../../assets/anim-ouverture.json')}
+                autoPlay
+                loop={false}
+                style={styles.lottieAnimation}
+                onAnimationFinish={onOpeningAnimationFinish}
+              />
+              <Text style={styles.openingText}>🎁 Ouverture de la capsule...</Text>
+            </View>
+          </View>
+        </Modal>
+
         <View style={styles.container}>
-          <Pressable style={styles.headerBack} onPress={() => router.back()}>
+          <Pressable style={styles.headerBack} onPress={() => router.replace('/dashboard')}>
             <ArrowLeft size={24} color="#FEFEFE" />
           </Pressable>
 
@@ -310,12 +339,23 @@ export default function CapsulePage() {
     )
   }
 
-  // ÉTAT DÉVERROUILLÉ - Contenu visible
+  // ÉTAT DÉVERROUILLÉ - Contenu visible (seulement si showContent est true)
+  if (!showContent) {
+    // Fallback - ne devrait jamais arriver mais empêche le flash
+    return (
+      <AnimatedBackground>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+        </View>
+      </AnimatedBackground>
+    )
+  }
+
   return (
     <AnimatedBackground>
       <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
-          <Pressable style={styles.headerBack} onPress={() => router.back()}>
+          <Pressable style={styles.headerBack} onPress={() => router.replace('/dashboard')}>
             <ArrowLeft size={24} color="#FEFEFE" />
           </Pressable>
 
@@ -479,4 +519,26 @@ const styles = StyleSheet.create({
 
   dateInfo: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center" },
   dateText: { color: "rgba(255,255,255,0.4)", fontSize: 13 },
+
+  // Animation modal styles
+  animationOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  animationContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lottieAnimation: {
+    width: width * 0.9,
+    height: width * 0.9,
+  },
+  openingText: {
+    color: "#FEFEFE",
+    fontSize: 20,
+    fontWeight: "600",
+    marginTop: -30,
+  },
 })

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, Platform, Image } from "react-native"
+import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, Platform, Image, Modal, Dimensions } from "react-native"
 import { useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { ArrowLeft, Send, Calendar, Users, MessageSquare, Video, X, Music, Search, Check } from "lucide-react-native"
@@ -15,6 +15,9 @@ import { decode } from "base64-arraybuffer"
 import { Audio } from "expo-av"
 import { searchMusic, type MusicTrack } from "@/lib/services/musicSearch"
 import { sendPushToUser, scheduleCapsuleUnlockNotification } from "@/lib/services/notifications"
+import LottieView from "lottie-react-native"
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window")
 
 export default function CreateCapsulePage() {
   const router = useRouter()
@@ -22,6 +25,8 @@ export default function CreateCapsulePage() {
   const [friends, setFriends] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
+  const lottieRef = useRef<LottieView>(null)
 
   const [title, setTitle] = useState("")
   const [note, setNote] = useState("")
@@ -313,12 +318,9 @@ export default function CreateCapsulePage() {
         )
       }
 
-      const friendCount = selectedFriends.length
-      Alert.alert(
-        "🎉 Envoyée !",
-        `Capsule envoyée à ${friendCount} ami${friendCount > 1 ? 's' : ''} !`,
-        [{ text: "Génial", onPress: () => router.back() }]
-      )
+      // Show success animation instead of alert
+      setShowSuccessAnimation(true)
+      setSending(false)
     } catch (error: any) {
       Alert.alert("Erreur", error.message)
     } finally {
@@ -336,6 +338,33 @@ export default function CreateCapsulePage() {
 
   return (
     <AnimatedBackground>
+      {/* Success Animation Modal */}
+      <Modal
+        visible={showSuccessAnimation}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.animationOverlay}>
+          <View style={styles.animationContainer}>
+            <LottieView
+              ref={lottieRef}
+              source={require('../../../assets/anim-validation.json')}
+              autoPlay
+              loop={false}
+              style={styles.lottieAnimation}
+              onAnimationFinish={() => {
+                setShowSuccessAnimation(false)
+                router.back()
+              }}
+            />
+            <Text style={styles.successText}>Capsule envoyée ! 🎉</Text>
+            <Text style={styles.successSubtext}>
+              {`Envoyée à ${selectedFriends.length} ami${selectedFriends.length > 1 ? 's' : ''}`}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
@@ -586,4 +615,31 @@ const styles = StyleSheet.create({
   removeMusicButton: { padding: 6, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12 },
 
   musicHint: { color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 8 },
+
+  // Animation modal styles
+  animationOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  animationContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lottieAnimation: {
+    width: screenWidth * 0.8,
+    height: screenWidth * 0.8,
+  },
+  successText: {
+    color: "#FEFEFE",
+    fontSize: 24,
+    fontWeight: "700",
+    marginTop: -20,
+  },
+  successSubtext: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 16,
+    marginTop: 8,
+  },
 })

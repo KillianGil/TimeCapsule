@@ -79,18 +79,43 @@ export default function ReceivedCapsulesPage() {
           <View style={styles.capsulesList}>
             {capsules.map((capsule) => {
               const isUnlocked = new Date(capsule.unlock_date) <= new Date()
+              const isViewed = capsule.is_viewed
+
+              // 3 states: locked (orange), new/unlocked (green), viewed (gray)
+              let statusIcon, statusText, statusStyle, badgeStyle
+              if (!isUnlocked) {
+                statusIcon = <Lock size={14} color="#FF6B35" />
+                statusText = "Verrouillée"
+                statusStyle = styles.statusTextLocked
+                badgeStyle = styles.badgeLocked
+              } else if (!isViewed) {
+                statusIcon = <Unlock size={14} color="#22c55e" />
+                statusText = "Nouvelle !"
+                statusStyle = styles.statusTextNew
+                badgeStyle = styles.badgeNew
+              } else {
+                statusIcon = <Unlock size={14} color="rgba(255,255,255,0.4)" />
+                statusText = "Déjà vue"
+                statusStyle = styles.statusTextViewed
+                badgeStyle = styles.badgeViewed
+              }
+
               return (
                 <Pressable
                   key={capsule.id}
-                  style={[styles.capsuleCard, isUnlocked && styles.capsuleCardUnlocked]}
+                  style={[
+                    styles.capsuleCard,
+                    isUnlocked && !isViewed && styles.capsuleCardNew,
+                    isUnlocked && isViewed && styles.capsuleCardViewed
+                  ]}
                   onPress={() => isUnlocked && router.push(`/dashboard/capsule/${capsule.id}`)}
                   disabled={!isUnlocked}
                 >
                   <View style={styles.capsuleHeader}>
-                    <View style={[styles.statusBadge, isUnlocked ? styles.badgeUnlocked : styles.badgeLocked]}>
-                      {isUnlocked ? <Unlock size={14} color="#22c55e" /> : <Lock size={14} color="#FF6B35" />}
-                      <Text style={[styles.statusText, isUnlocked && styles.statusTextUnlocked]}>
-                        {isUnlocked ? "Ouverte" : "Verrouillée"}
+                    <View style={[styles.statusBadge, badgeStyle]}>
+                      {statusIcon}
+                      <Text style={[styles.statusText, statusStyle]}>
+                        {statusText}
                       </Text>
                     </View>
                     {capsule.music_title && (
@@ -152,16 +177,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)"
   },
-  capsuleCardUnlocked: {
-    backgroundColor: "rgba(255,107,53,0.08)",
-    borderColor: "rgba(255,107,53,0.2)"
+  capsuleCardNew: {
+    backgroundColor: "rgba(34,197,94,0.1)",
+    borderColor: "rgba(34,197,94,0.3)"
+  },
+  capsuleCardViewed: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.06)",
+    opacity: 0.8
   },
   capsuleHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   statusBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
   badgeLocked: { backgroundColor: "rgba(255,107,53,0.15)" },
-  badgeUnlocked: { backgroundColor: "rgba(34,197,94,0.15)" },
+  badgeNew: { backgroundColor: "rgba(34,197,94,0.2)" },
+  badgeViewed: { backgroundColor: "rgba(255,255,255,0.08)" },
   statusText: { fontSize: 12, fontWeight: "600", color: "#FF6B35" },
-  statusTextUnlocked: { color: "#22c55e" },
+  statusTextLocked: { color: "#FF6B35" },
+  statusTextNew: { color: "#22c55e" },
+  statusTextViewed: { color: "rgba(255,255,255,0.5)" },
   musicBadge: { padding: 6, backgroundColor: "rgba(255,107,53,0.15)", borderRadius: 8 },
 
   capsuleTitle: { fontSize: 18, fontWeight: "600", color: "#FEFEFE", marginBottom: 12 },
