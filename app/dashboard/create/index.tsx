@@ -14,6 +14,7 @@ import * as FileSystem from "expo-file-system/legacy"
 import { decode } from "base64-arraybuffer"
 import { Audio } from "expo-av"
 import { searchMusic, type MusicTrack } from "@/lib/services/musicSearch"
+import { sendPushToUser, scheduleCapsuleUnlockNotification } from "@/lib/services/notifications"
 
 export default function CreateCapsulePage() {
   const router = useRouter()
@@ -24,7 +25,7 @@ export default function CreateCapsulePage() {
 
   const [title, setTitle] = useState("")
   const [note, setNote] = useState("")
-  const [selectedFriend, setSelectedFriend] = useState<string | null>(null)
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([])
 
   // Date Picker State - Always visible for better UX
   const [unlockDate, setUnlockDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
@@ -215,9 +216,17 @@ export default function CreateCapsulePage() {
     }
   }
 
+  const toggleFriendSelection = (friendId: string) => {
+    setSelectedFriends(prev =>
+      prev.includes(friendId)
+        ? prev.filter(id => id !== friendId)
+        : [...prev, friendId]
+    )
+  }
+
   const handleSend = async () => {
-    if (!selectedFriend) {
-      Alert.alert("Ami manquant", "Sélectionnez un ami.")
+    if (selectedFriends.length === 0) {
+      Alert.alert("Ami(s) manquant(s)", "Sélectionnez au moins un ami.")
       return
     }
     if (!videoUri) {
@@ -266,9 +275,10 @@ export default function CreateCapsulePage() {
         console.log("✅ Video uploaded:", videoPath)
       }
 
-      const { error } = await supabase.from("capsules").insert({
+      // Create a capsule for each selected friend
+      const capsulesToInsert = selectedFriends.map(friendId => ({
         sender_id: userId,
-        receiver_id: selectedFriend,
+        receiver_id: friendId,
         title,
         note,
         video_path: videoPath,
@@ -278,10 +288,37 @@ export default function CreateCapsulePage() {
         music_cover_url: selectedMusic?.cover || null,
         unlock_date: unlockDate.toISOString(),
         is_viewed: false,
-      })
+      }))
+
+      const { error } = await supabase.from("capsules").insert(capsulesToInsert)
 
       if (error) throw error
-      Alert.alert("Succès", "Capsule envoyée dans le futur !", [{ text: "Génial", onPress: () => router.back() }])
+
+      // Send push notifications to all recipients
+      const myProfile = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .single()
+
+      const senderName = myProfile.data?.username || 'Quelqu\'un'
+
+      for (const friendId of selectedFriends) {
+        // Notify about new capsule
+        sendPushToUser(
+          friendId,
+          '📬 Nouvelle capsule !',
+          `${senderName} vous a envoyé une capsule temporelle`,
+          { type: 'new_capsule' }
+        )
+      }
+
+      const friendCount = selectedFriends.length
+      Alert.alert(
+        "🎉 Envoyée !",
+        `Capsule envoyée à ${friendCount} ami${friendCount > 1 ? 's' : ''} !`,
+        [{ text: "Génial", onPress: () => router.back() }]
+      )
     } catch (error: any) {
       Alert.alert("Erreur", error.message)
     } finally {
@@ -326,20 +363,27 @@ export default function CreateCapsulePage() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Destinataire</Text>
+            <Text style={styles.label}>
+              Destinataire{selectedFriends.length > 1 ? 's' : ''}
+              {selectedFriends.length > 0 && ` (${selectedFriends.length})`}
+            </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.friendsScroll}>
-              {friends.map((friend) => (
-                <Pressable
-                  key={friend.id}
-                  style={[styles.friendChip, selectedFriend === friend.id && styles.friendChipSelected]}
-                  onPress={() => setSelectedFriend(friend.id)}
-                >
-                  <Users size={14} color={selectedFriend === friend.id ? "#FFF" : "#FF6B35"} />
-                  <Text style={[styles.friendChipText, selectedFriend === friend.id && styles.friendChipTextSelected]}>
-                    {friend.username}
-                  </Text>
-                </Pressable>
-              ))}
+              {friends.map((friend) => {
+                const isSelected = selectedFriends.includes(friend.id)
+                return (
+                  <Pressable
+                    key={friend.id}
+                    style={[styles.friendChip, isSelected && styles.friendChipSelected]}
+                    onPress={() => toggleFriendSelection(friend.id)}
+                  >
+                    {isSelected && <Check size={14} color="#FFF" />}
+                    <Users size={14} color={isSelected ? "#FFF" : "#FF6B35"} />
+                    <Text style={[styles.friendChipText, isSelected && styles.friendChipTextSelected]}>
+                      {friend.username}
+                    </Text>
+                  </Pressable>
+                )
+              })}
               {friends.length === 0 && (
                 <Text style={styles.noFriends}>Ajoutez des amis d'abord</Text>
               )}

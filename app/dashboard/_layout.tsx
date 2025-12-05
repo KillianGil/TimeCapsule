@@ -1,16 +1,45 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useRef } from "react"
 import { View, StyleSheet, ActivityIndicator, Platform } from "react-native"
 import { Tabs, useRouter } from "expo-router"
 import { supabase } from "@/lib/supabase/mobile"
 import { Home, Users, User } from "lucide-react-native"
+import { registerForPushNotifications } from "@/lib/services/notifications"
+import * as Notifications from 'expo-notifications'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 export default function DashboardLayout() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const notificationListener = useRef<Notifications.EventSubscription | null>(null)
+  const responseListener = useRef<Notifications.EventSubscription | null>(null)
+  const insets = useSafeAreaInsets()
 
-  useEffect(() => { checkAuth() }, [])
+  useEffect(() => {
+    checkAuth()
+
+    // Register for push notifications
+    registerForPushNotifications()
+
+    // Listen for notifications received while app is open
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received:', notification)
+    })
+
+    // Listen for user tapping on notification
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data
+      if (data?.capsuleId) {
+        router.push(`/dashboard/capsule/${data.capsuleId}`)
+      }
+    })
+
+    return () => {
+      if (notificationListener.current) notificationListener.current.remove()
+      if (responseListener.current) responseListener.current.remove()
+    }
+  }, [])
 
   async function checkAuth() {
     try {
@@ -35,8 +64,8 @@ export default function DashboardLayout() {
           backgroundColor: "#0F0D0B",
           borderTopWidth: 0,
           elevation: 0,
-          height: Platform.OS === 'ios' ? 88 : 68,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 8,
           paddingTop: 8,
         },
         tabBarActiveTintColor: "#FF6B35",

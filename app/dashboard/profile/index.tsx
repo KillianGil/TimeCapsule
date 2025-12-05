@@ -7,9 +7,16 @@ import { supabase } from "@/lib/supabase/mobile"
 import type { Profile } from "@/lib/types"
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground"
 import { LinearGradient } from "expo-linear-gradient"
-import { LogOut, Camera, Mail, Calendar, User, Upload } from "lucide-react-native"
+import { LogOut, Camera, Mail, Calendar, User, Send, Inbox, Users, Music } from "lucide-react-native"
 import * as ImagePicker from "expo-image-picker"
 import { decode } from "base64-arraybuffer"
+
+interface Stats {
+  sentCount: number
+  receivedCount: number
+  friendsCount: number
+  musicCapsulesCount: number
+}
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -17,6 +24,7 @@ export default function ProfilePage() {
   const [userEmail, setUserEmail] = useState("")
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [stats, setStats] = useState<Stats>({ sentCount: 0, receivedCount: 0, friendsCount: 0, musicCapsulesCount: 0 })
 
   useEffect(() => {
     fetchData()
@@ -38,6 +46,25 @@ export default function ProfilePage() {
         .single()
 
       if (data) setProfile(data)
+
+      // Fetch stats
+      const [sentResult, receivedResult, friendsResult, musicResult] = await Promise.all([
+        supabase.from("capsules").select("*", { count: "exact", head: true }).eq("sender_id", user.id),
+        supabase.from("capsules").select("*", { count: "exact", head: true }).eq("receiver_id", user.id),
+        supabase.from("friendships").select("*", { count: "exact", head: true })
+          .eq("status", "accepted")
+          .or(`requester_id.eq.${user.id},receiver_id.eq.${user.id}`),
+        supabase.from("capsules").select("*", { count: "exact", head: true })
+          .eq("sender_id", user.id)
+          .not("music_title", "is", null),
+      ])
+
+      setStats({
+        sentCount: sentResult.count || 0,
+        receivedCount: receivedResult.count || 0,
+        friendsCount: friendsResult.count || 0,
+        musicCapsulesCount: musicResult.count || 0,
+      })
     } catch (error) {
       console.error("Error fetching profile:", error)
     } finally {
@@ -66,10 +93,10 @@ export default function ProfilePage() {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: 0.8,
         base64: true,
       })
 
@@ -157,6 +184,38 @@ export default function ProfilePage() {
           <Text style={styles.username}>{profile?.username || "Utilisateur"}</Text>
         </View>
 
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <LinearGradient colors={["rgba(255,107,53,0.15)", "rgba(255,107,53,0.05)"]} style={styles.statGradient}>
+              <Send size={22} color="#FF6B35" />
+              <Text style={styles.statNumber}>{stats.sentCount}</Text>
+              <Text style={styles.statLabel}>Envoyées</Text>
+            </LinearGradient>
+          </View>
+          <View style={styles.statCard}>
+            <LinearGradient colors={["rgba(34,197,94,0.15)", "rgba(34,197,94,0.05)"]} style={styles.statGradient}>
+              <Inbox size={22} color="#22c55e" />
+              <Text style={[styles.statNumber, { color: "#22c55e" }]}>{stats.receivedCount}</Text>
+              <Text style={styles.statLabel}>Reçues</Text>
+            </LinearGradient>
+          </View>
+          <View style={styles.statCard}>
+            <LinearGradient colors={["rgba(59,130,246,0.15)", "rgba(59,130,246,0.05)"]} style={styles.statGradient}>
+              <Users size={22} color="#3b82f6" />
+              <Text style={[styles.statNumber, { color: "#3b82f6" }]}>{stats.friendsCount}</Text>
+              <Text style={styles.statLabel}>Amis</Text>
+            </LinearGradient>
+          </View>
+          <View style={styles.statCard}>
+            <LinearGradient colors={["rgba(168,85,247,0.15)", "rgba(168,85,247,0.05)"]} style={styles.statGradient}>
+              <Music size={22} color="#a855f7" />
+              <Text style={[styles.statNumber, { color: "#a855f7" }]}>{stats.musicCapsulesCount}</Text>
+              <Text style={styles.statLabel}>Avec musique</Text>
+            </LinearGradient>
+          </View>
+        </View>
+
         {/* Info */}
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
@@ -172,7 +231,7 @@ export default function ProfilePage() {
             <View style={styles.infoContent}>
               <Text style={styles.infoLabel}>Membre depuis</Text>
               <Text style={styles.infoValue}>
-                {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("fr-FR") : "-"}
+                {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "-"}
               </Text>
             </View>
           </View>
@@ -193,6 +252,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 24, paddingTop: 60, paddingBottom: 120 },
   headerTitle: { fontSize: 24, fontWeight: "700", color: "#FEFEFE", textAlign: "center", marginBottom: 32 },
+
   avatarSection: { alignItems: "center", marginBottom: 32 },
   avatarContainer: { width: 100, height: 100, borderRadius: 50, padding: 3, marginBottom: 16 },
   avatarGradient: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: 50 },
@@ -200,12 +260,21 @@ const styles = StyleSheet.create({
   avatarImage: { width: "100%", height: "100%" },
   editBadge: { position: "absolute", bottom: 0, right: 0, backgroundColor: "#FF6B35", padding: 8, borderRadius: 20, borderWidth: 3, borderColor: "#0F0D0B" },
   username: { fontSize: 22, fontWeight: "700", color: "#FEFEFE" },
+
+  // Stats
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 24 },
+  statCard: { width: "47%", borderRadius: 16, overflow: "hidden" },
+  statGradient: { padding: 16, alignItems: "center", gap: 8, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", borderRadius: 16 },
+  statNumber: { fontSize: 28, fontWeight: "800", color: "#FF6B35" },
+  statLabel: { fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: "500" },
+
   infoCard: { backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 16, padding: 4, marginBottom: 32, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
   infoRow: { flexDirection: "row", alignItems: "center", padding: 16, gap: 14 },
   infoContent: { flex: 1 },
   infoLabel: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 2 },
   infoValue: { fontSize: 15, color: "#FEFEFE", fontWeight: "500" },
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)", marginLeft: 48 },
+
   logoutButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255, 107, 53, 0.3)", backgroundColor: "rgba(255, 107, 53, 0.1)" },
   logoutText: { color: "#FF6B35", fontSize: 15, fontWeight: "600" },
 })
