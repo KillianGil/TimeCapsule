@@ -177,7 +177,11 @@ export default function DashboardPage() {
           </View>
           {sentCapsules.length > 0 ? (
             sentCapsules.map((capsule) => (
-              <View key={capsule.id} style={styles.capsuleCard}>
+              <Pressable
+                key={capsule.id}
+                style={styles.capsuleCard}
+                onPress={() => router.push(`/dashboard/capsule/${capsule.id}`)}
+              >
                 <View style={styles.capsuleIcon}>
                   <Send size={20} color="rgba(255,255,255,0.4)" strokeWidth={1.5} />
                 </View>
@@ -190,7 +194,7 @@ export default function DashboardPage() {
                     {new Date(capsule.unlock_date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             ))
           ) : (
             <View style={styles.emptyState}>

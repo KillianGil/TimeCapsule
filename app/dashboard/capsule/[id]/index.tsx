@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { View, Text, StyleSheet, ActivityIndicator, Pressable, Animated, Dimensions, ScrollView, Image, Modal } from "react-native"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
-import { ArrowLeft, Lock, Clock, Gift, Play, User, Calendar, MessageSquare, Video as VideoIcon, Music, Pause } from "lucide-react-native"
+import { ArrowLeft, Lock, Clock, Gift, Play, User, Calendar, MessageSquare, Video as VideoIcon, Music, Pause, Scan } from "lucide-react-native"
 import { supabase } from "@/lib/supabase/mobile"
 import type { Capsule } from "@/lib/types"
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground"
@@ -33,7 +33,7 @@ function VideoPlayer({ videoUrl }: { videoUrl: string }) {
 }
 
 export default function CapsulePage() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, autoOpen } = useLocalSearchParams<{ id: string; autoOpen?: string }>()
   const router = useRouter()
   const [capsule, setCapsule] = useState<Capsule | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -58,6 +58,19 @@ export default function CapsulePage() {
   useEffect(() => {
     fetchCapsule()
   }, [id])
+
+  // Auto-open capsule if coming from AR mode
+  useEffect(() => {
+    if (autoOpen === 'true' && capsule && isUnlocked && !showContent) {
+      // Skip animation and show content directly
+      setShowContent(true)
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start()
+    }
+  }, [autoOpen, capsule, isUnlocked])
 
   useEffect(() => {
     if (capsule && !isUnlocked) {
@@ -171,12 +184,21 @@ export default function CapsulePage() {
 
     try {
       if (musicSound) {
-        if (isMusicPlaying) {
-          await musicSound.pauseAsync()
-          setIsMusicPlaying(false)
-        } else {
-          await musicSound.playAsync()
-          setIsMusicPlaying(true)
+        const status = await musicSound.getStatusAsync()
+
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await musicSound.pauseAsync()
+            setIsMusicPlaying(false)
+          } else if (status.didJustFinish) {
+            // Replay from start if finished
+            await musicSound.replayAsync()
+            setIsMusicPlaying(true)
+          } else {
+            // Resume
+            await musicSound.playAsync()
+            setIsMusicPlaying(true)
+          }
         }
       } else {
         // First time - load and play
@@ -280,6 +302,30 @@ export default function CapsulePage() {
                 Ouverture le {new Date(capsule.unlock_date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
               </Text>
             </View>
+
+            <Pressable
+              style={styles.arButton}
+              onPress={() => router.push({
+                pathname: '/ar-mode',
+                params: {
+                  capsuleId: id,
+                  isUnlocked: 'false',
+                  unlockDate: capsule.unlock_date,
+                  senderName: capsule.sender?.username || 'Inconnu',
+                  title: capsule.title || 'Capsule temporelle'
+                }
+              })}
+            >
+              <LinearGradient
+                colors={["#F4D35E", "#D4A574"]}
+                style={styles.arGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Scan size={20} color="#0F0D0B" strokeWidth={2.5} />
+                <Text style={styles.arButtonText}>Voir en RA</Text>
+              </LinearGradient>
+            </Pressable>
           </View>
         </View>
       </AnimatedBackground>
@@ -331,6 +377,31 @@ export default function CapsulePage() {
               <LinearGradient colors={["#FF6B35", "#D4A574"]} style={styles.openButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                 <Play size={24} color="#FFFFFF" fill="#FFFFFF" />
                 <Text style={styles.openButtonText}>Ouvrir la capsule</Text>
+              </LinearGradient>
+            </Pressable>
+
+            <Pressable
+              style={[styles.arButton, { marginTop: 16 }]}
+              onPress={() => router.push({
+                pathname: '/ar-mode',
+                params: {
+                  capsuleId: id,
+                  isUnlocked: 'true',
+                  isOpened: 'false',
+                  unlockDate: capsule.unlock_date,
+                  senderName: capsule.sender?.username || 'Inconnu',
+                  title: capsule.title || 'Capsule temporelle'
+                }
+              })}
+            >
+              <LinearGradient
+                colors={["#F4D35E", "#D4A574"]}
+                style={styles.arGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Scan size={20} color="#0F0D0B" strokeWidth={2.5} />
+                <Text style={styles.arButtonText}>Ouvrir en RA</Text>
               </LinearGradient>
             </Pressable>
           </View>
@@ -433,6 +504,31 @@ export default function CapsulePage() {
                 Envoyée le {new Date(capsule.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
               </Text>
             </View>
+
+            <Pressable
+              style={[styles.arButton, { marginTop: 24, alignSelf: 'center' }]}
+              onPress={() => router.push({
+                pathname: '/ar-mode',
+                params: {
+                  capsuleId: id,
+                  isUnlocked: 'true',
+                  isOpened: 'true',
+                  unlockDate: capsule.unlock_date,
+                  senderName: capsule.sender?.username || 'Inconnu',
+                  title: capsule.title || 'Capsule temporelle'
+                }
+              })}
+            >
+              <LinearGradient
+                colors={["#F4D35E", "#D4A574"]}
+                style={styles.arGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Scan size={20} color="#0F0D0B" strokeWidth={2.5} />
+                <Text style={styles.arButtonText}>Revoir en RA</Text>
+              </LinearGradient>
+            </Pressable>
           </Animated.View>
         </View>
       </ScrollView>
@@ -468,8 +564,12 @@ const styles = StyleSheet.create({
   countdownLabel: { fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginTop: 8 },
   countdownSeparator: { fontSize: 28, color: "#FF6B35", marginTop: 18, marginHorizontal: 4 },
 
-  capsuleInfo: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
+  capsuleInfo: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", marginBottom: 24 },
   infoText: { color: "rgba(255,255,255,0.6)", fontSize: 14 },
+
+  arButton: { width: "100%", maxWidth: 220, shadowColor: "#F4D35E", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  arGradient: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, gap: 10 },
+  arButtonText: { color: "#0F0D0B", fontSize: 16, fontWeight: "700" },
 
   // Unlocked - Before Open
   unlockedContent: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 100 },

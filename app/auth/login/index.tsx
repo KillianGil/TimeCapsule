@@ -18,12 +18,39 @@ export default function LoginPage() {
   const handleLogin = async () => {
     setIsLoading(true)
     setError(null)
+
+    let loginEmail = email.trim()
+
+    // Simple check if it's an email or username
+    const isEmail = loginEmail.includes('@')
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (!isEmail) {
+        // Assume it's a username, try to get email via RPC
+        const { data: userEmail, error: rpcError } = await supabase
+          .rpc('get_email_for_username', { username_input: loginEmail })
+
+        if (rpcError) {
+          console.error("RPC Error:", rpcError)
+          throw new Error("Erreur lors de la recherche du pseudo")
+        }
+
+        if (!userEmail) {
+          throw new Error("Aucun compte trouvé avec ce pseudo")
+        }
+
+        loginEmail = userEmail
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password
+      })
+
       if (error) throw error
       router.replace("/dashboard")
     } catch (error: any) {
-      setError(error.message || "Une erreur est survenue")
+      setError(error.message || "Identifiants incorrects")
     } finally {
       setIsLoading(false)
     }
@@ -46,7 +73,7 @@ export default function LoginPage() {
           {/* Form */}
           <View style={styles.form}>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>Email ou Pseudo</Text>
               <View style={styles.inputContainer}>
                 <Mail size={20} color="rgba(255,255,255,0.4)" />
                 <TextInput
@@ -56,13 +83,17 @@ export default function LoginPage() {
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
-                  keyboardType="email-address"
                 />
               </View>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Mot de passe</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.label}>Mot de passe</Text>
+                <Link href="/auth/forgot-password">
+                  <Text style={styles.forgotPassword}>Oublié ?</Text>
+                </Link>
+              </View>
               <View style={styles.inputContainer}>
                 <Lock size={20} color="rgba(255,255,255,0.4)" />
                 <TextInput
@@ -130,4 +161,5 @@ const styles = StyleSheet.create({
   footer: { flexDirection: "row", justifyContent: "center", marginTop: 32 },
   footerText: { color: "rgba(255,255,255,0.4)", fontSize: 15 },
   linkText: { color: "#FF6B35", fontWeight: "600", fontSize: 15 },
+  forgotPassword: { color: "#FF6B35", fontSize: 13, fontWeight: "600" },
 })

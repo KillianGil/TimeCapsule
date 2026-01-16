@@ -19,7 +19,9 @@
       "bundleIdentifier": "com.yoyo1803.timecapsule",
       "icon": "./assets/appstore.png",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "L'application a besoin d'accéder à la caméra pour le mode Réalité Augmentée.",
+        "NSMotionUsageDescription": "L'application utilise l'accéléromètre pour orienter la vue en Réalité Augmentée."
       }
     },
     "android": {
