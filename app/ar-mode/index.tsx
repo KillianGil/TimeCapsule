@@ -13,10 +13,6 @@ import { SkeletonUtils } from 'three-stdlib';
 const { height } = Dimensions.get('window');
 
 const MODEL_PATH = require('../../assets/geocaching_capsules.glb');
-const MODEL_URI = Asset.fromModule(MODEL_PATH).uri;
-
-// Précharger le modèle GLB au démarrage
-useGLTF.preload(MODEL_URI);
 
 // --- GYROSCOPE CAMERA ---
 function GyroCamera({ rotation, isLocked }: { rotation: { beta: number; gamma: number }; isLocked: boolean }) {
@@ -42,12 +38,13 @@ interface CapsuleModelProps {
     onTap: () => void;
     shouldOpen: boolean;
     onOpenComplete: () => void;
+    modelUri: string;
 }
 
-function CapsuleModel({ position, isUnlocked, onTap, shouldOpen, onOpenComplete, onReady, visible = true }: CapsuleModelProps & { onReady?: () => void; visible?: boolean }) {
+function CapsuleModel({ position, isUnlocked, onTap, shouldOpen, onOpenComplete, onReady, visible = true, modelUri }: CapsuleModelProps & { onReady?: () => void; visible?: boolean }) {
     const groupRef = useRef<THREE.Group>(null!);
     const { camera } = useThree();
-    const { scene, animations } = useGLTF(MODEL_URI);
+    const { scene, animations } = useGLTF(modelUri);
     const hasCalledReady = useRef(false);
     const { actions, names } = useAnimations(animations, groupRef);
     const [hasTriggeredComplete, setHasTriggeredComplete] = useState(false);
@@ -256,7 +253,7 @@ function FallbackCapsule({ position, isUnlocked, onTap, shouldOpen, onOpenComple
 }
 
 // --- SCENE ---
-function Scene({ capsulePosition, deviceRotation, isUnlocked, shouldOpen, onTap, onOpenComplete, useGLBModel, capsuleVisible, onModelReady }: {
+function Scene({ capsulePosition, deviceRotation, isUnlocked, shouldOpen, onTap, onOpenComplete, useGLBModel, capsuleVisible, onModelReady, modelUri }: {
     capsulePosition: [number, number, number];
     deviceRotation: { beta: number; gamma: number };
     isUnlocked: boolean;
@@ -266,6 +263,7 @@ function Scene({ capsulePosition, deviceRotation, isUnlocked, shouldOpen, onTap,
     useGLBModel: boolean;
     capsuleVisible: boolean;
     onModelReady: () => void;
+    modelUri: string;
 }) {
     // Si on utilise le fallback, signaler prêt immédiatement
     useEffect(() => {
@@ -282,21 +280,22 @@ function Scene({ capsulePosition, deviceRotation, isUnlocked, shouldOpen, onTap,
             <directionalLight position={[0, 8, 5]} intensity={0.7} />
             <GyroCamera rotation={deviceRotation} isLocked={shouldOpen} />
             <Suspense fallback={null}>
-                {useGLBModel ? (
+                {useGLBModel && modelUri ? (
                     <CapsuleModel
                         position={capsulePosition}
                         isUnlocked={isUnlocked}
-                        onTap={capsuleVisible ? onTap : () => {}}
+                        onTap={capsuleVisible ? onTap : () => { }}
                         shouldOpen={shouldOpen}
                         onOpenComplete={onOpenComplete}
                         onReady={onModelReady}
                         visible={capsuleVisible}
+                        modelUri={modelUri}
                     />
                 ) : (
                     <FallbackCapsule
                         position={capsulePosition}
                         isUnlocked={isUnlocked}
-                        onTap={capsuleVisible ? onTap : () => {}}
+                        onTap={capsuleVisible ? onTap : () => { }}
                         shouldOpen={shouldOpen}
                         onOpenComplete={onOpenComplete}
                         visible={capsuleVisible}
@@ -333,6 +332,7 @@ export default function ARMode() {
     const [showMessage, setShowMessage] = useState(false);
     const [fadeOut, setFadeOut] = useState(false);
     const [useGLBModel, setUseGLBModel] = useState(false);
+    const [modelUri, setModelUri] = useState<string>('');
     const [isSearching, setIsSearching] = useState(true);
     const [capsuleVisible, setCapsuleVisible] = useState(false);
     const [modelReady, setModelReady] = useState(false);
@@ -344,20 +344,25 @@ export default function ARMode() {
     const pulseRef = useRef<RNAnimated.CompositeAnimation | null>(null);
     const minSearchTimeRef = useRef(false);
 
-    // Vérifier si le modèle GLB est disponible
+    // Charger le modèle GLB de manière asynchrone
     useEffect(() => {
-        try {
-            const asset = Asset.fromModule(MODEL_PATH);
-            if (asset) {
-                setUseGLBModel(true);
-            } else {
+        const loadAsset = async () => {
+            try {
+                const asset = Asset.fromModule(MODEL_PATH);
+                await asset.downloadAsync();
+                if (asset.localUri) {
+                    setModelUri(asset.localUri);
+                    setUseGLBModel(true);
+                } else {
+                    setUseGLBModel(false);
+                    setModelReady(true);
+                }
+            } catch {
                 setUseGLBModel(false);
-                setModelReady(true); // Fallback prêt immédiatement
+                setModelReady(true);
             }
-        } catch {
-            setUseGLBModel(false);
-            setModelReady(true); // Fallback prêt immédiatement
-        }
+        };
+        loadAsset();
     }, []);
 
     // Callback quand le modèle 3D est prêt
@@ -518,6 +523,7 @@ export default function ARMode() {
                         useGLBModel={useGLBModel}
                         capsuleVisible={capsuleVisible}
                         onModelReady={handleModelReady}
+                        modelUri={modelUri}
                     />
                 </Canvas>
             </View>

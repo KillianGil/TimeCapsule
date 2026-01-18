@@ -1,5 +1,3 @@
-"use client"
-
 import React, { useEffect, useRef } from "react"
 import { View, Text, StyleSheet, Pressable, Dimensions, Animated, Easing, Image } from "react-native"
 import { useRouter } from "expo-router"
